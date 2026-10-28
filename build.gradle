@@ -76,3 +76,16 @@ tasks.named('jar') {
         )
     }
 }
+
+tasks.register('taskBrokerTest', JavaExec) {
+    group = 'verification'
+    description = 'E 阶段验收：异步任务代理（提交/取回/超时/去重）'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'top.hibermod.ctdweb.tools.TaskBrokerTest'
+}
+tasks.register('protocolHarness', JavaExec) {
+    group = 'verification'
+    description = '协议联调台：起桥并等外部客户端'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'top.hibermod.ctdweb.tools.ProtocolHarness'
+}

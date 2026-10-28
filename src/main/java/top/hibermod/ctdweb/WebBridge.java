@@ -46,6 +46,7 @@ public final class WebBridge {
     private final int port;
     private final Set<Client> clients = ConcurrentHashMap.newKeySet();
     private final AtomicReference<String> latestResponse = new AtomicReference<>();
+    private final TaskBroker broker = new TaskBroker();
     private final AtomicInteger received = new AtomicInteger();
 
     private volatile ServerSocket server;
@@ -62,6 +63,10 @@ public final class WebBridge {
 
     public int clients() {
         return clients.size();
+    }
+
+    public TaskBroker broker() {
+        return broker;
     }
 
     public String latestResponse() {
@@ -125,6 +130,11 @@ public final class WebBridge {
     }
 
     // ── 推送 ──────────────────────────────────────────────────────────────
+
+    /** 把任务推给客户端。与快照同一通道，靠 JSON 字段区分。 */
+    public void publishTask(String json) {
+        publish(json);
+    }
 
     /** 游戏线程调用。只写字节，不等对端。 */
     public void publish(String json) {
@@ -216,7 +226,7 @@ public final class WebBridge {
                     Frame f = readFrame();
                     if (f == null) break;
                     switch (f.opcode()) {
-                        case 0x1 -> acceptResponse(f.text());
+                        case 0x1 -> handleText(f.text());
                         case 0x8 -> { close(); return; }        // close
                         case 0x9 -> writeFrame(0xA, f.payload()); // ping → pong
                         default -> { }
@@ -266,6 +276,31 @@ public final class WebBridge {
                 if (n < 0) throw new IOException("eof");
                 read += n;
             }
+        }
+
+        /** 回执与任务结果走同一个通道，靠 JSON 里的 taskResult 字段区分。 */
+        private void handleText(String text) {
+            String trimmed = text.trim();
+            if (trimmed.contains("taskResult")) {
+                String id = extract(trimmed, "id");
+                boolean ok = trimmed.contains("\"ok\":true");
+                String payload = extract(trimmed, "payload");
+                broker.complete(id, ok, payload, 0);
+            } else {
+                acceptResponse(text);
+            }
+        }
+
+        /** 极简取值：抓 "key":"value" 的第一个字符串值。够用且不引依赖。 */
+        private String extract(String json, String key) {
+            int k = json.indexOf("\"" + key + "\"");
+            if (k < 0) return "";
+            int colon = json.indexOf(':', k);
+            if (colon < 0) return "";
+            int open = json.indexOf('"', colon + 1);
+            if (open < 0) return "";
+            int end = json.indexOf('"', open + 1);
+            return end < 0 ? "" : json.substring(open + 1, end);
         }
 
         synchronized void sendText(byte[] text) {

@@ -107,3 +107,52 @@ ok  Sec-WebSocket-Accept 正确     ok  NATIVE / HOLD / GRACEFUL 三种策略
 NeoForge 的开发编译路径里没有 `netty-codec-http`。为一个桥接去拉一条版本容易漂移的
 依赖不划算——WebSocket 的服务端子集很小（一次 SHA-1 握手 + 两种帧格式），
 自己写反而没有依赖也没有版本风险。
+
+---
+
+## 8. 异步任务（E 阶段）
+
+快照往返适合「扣车 / 改灯」这类即时决策，但排图、全网重新规划要几百毫秒——
+压进 tick 就是卡服。所以另开一条**不问即答**的通道。
+
+### 服务端 → 客户端
+
+```json
+{ "task": { "id": "t7", "kind": "timetable", "payload": "{\"trains\":3}" } }
+```
+
+### 客户端 → 服务端
+
+```json
+{ "taskResult": { "id": "t7", "ok": true, "payload": "echo:timetable" } }
+```
+
+`payload` 必须是**不含内嵌引号的字符串**。桥用极简扫描取值——
+这看起来土，但比引一个 JSON 库到 tick 线程上要安全得多。
+需要传结构化数据请自己 base64 或压成单行。
+
+### 语义
+
+| 行为 | 结果 |
+|---|---|
+| 提交 | 立刻返回 id，**不等待** |
+| 取结果 | 没有就返回空，内核该帧照常决策 |
+| 超时 | 任务丢弃并计数，晚到的结果被拒绝（不产生状态跳变） |
+| 重复 id | 第二次被拒绝并计数 |
+
+### 实测（跨语言）
+
+```
+# Java 侧
+harness: listening on ws://127.0.0.1:8767/ctd
+harness: task t8 answered
+harness: done. tasks=10 stats=submitted=10 completed=6 expired=0 dropped=0
+
+# Python 侧（只用标准库，不装 websockets）
+connected: ws://127.0.0.1:8767/ctd
+[t=84] frames=1 trains=1
+   CRH2A-2013   v=0.310 target=0.400 MA=320
+task t5 kind=timetable -> replied
+```
+
+`tools/example_client.py` 可以当协议检查器用：**如果写它的时候觉得别扭，说明协议该改。**
