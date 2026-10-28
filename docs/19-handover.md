@@ -30,6 +30,7 @@
 | **改派语义** | `assignmentsTest` 9 项；输的一方被撤销而非崩溃 |
 | 热重载 | 改脚本 → `/ctd reload` → 行为变化（靠 `DispatchKernels.revision()` 重建 pass） |
 | Web 桥 | `bridgeTest` 18 项 · `taskBrokerTest` 13 项 · Python 标准库客户端实测 |
+| 指令转交 | 设备/电量/服务/HUD/PIS/事件 → `OperationFeed`，`forwarded: devices=5` 实测 |
 
 ---
 
