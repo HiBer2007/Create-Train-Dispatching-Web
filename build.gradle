@@ -66,3 +66,13 @@ tasks.register('bridgeTest', JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'top.hibermod.ctdweb.tools.BridgeTest'
 }
+// ${file.jarVersion} 读的是 jar manifest 的 Implementation-Version。
+// 不显式写入，发布版会显示成 0.0NONE（开发环境已经见过）。
+tasks.named('jar') {
+    manifest {
+        attributes(
+            'Implementation-Title'  : project.findProperty('mod_name') ?: project.archives_name,
+            'Implementation-Version': project.version
+        )
+    }
+}
