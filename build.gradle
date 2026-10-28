@@ -1,0 +1,68 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.141'
+}
+
+group = project.maven_group
+version = project.mod_version
+base {
+    archivesName = project.archives_name
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}
+
+// ── NeoForged maven 镜像（同另外三个仓库）────────────────────────────────
+def neoforgeMirror = { repo ->
+    if (repo instanceof org.gradle.api.artifacts.repositories.MavenArtifactRepository) {
+        def u = repo.url.toString()
+        if (u.contains("://maven.neoforged.net")) {
+            repo.url = uri(u.replace("://maven.neoforged.net", "://neoforged.forgecdn.net"))
+        }
+    }
+}
+repositories.whenObjectAdded(neoforgeMirror)
+repositories.each(neoforgeMirror)
+gradle.projectsEvaluated { project.repositories.each(neoforgeMirror) }
+
+repositories {
+    mavenCentral()
+}
+
+neoForge {
+    version = project.neo_version
+
+    mods {
+        ctdweb {
+            sourceSet sourceSets.main
+        }
+    }
+
+    runs {
+        client {
+            client()
+        }
+        server {
+            server()
+        }
+    }
+}
+
+dependencies {
+    // 契约层。Web 桥只通过 API 观察与下发，不碰 Create。
+    implementation files("libs/${project.ctdapi_jar}")
+    // Gson 与 Netty 都由 Minecraft / NeoForge 提供，不额外声明。
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 21
+}
+
+tasks.register('bridgeTest', JavaExec) {
+    group = 'verification'
+    description = 'D 阶段验收：WebSocket 握手 / 推送 / 回执 / 断线策略'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'top.hibermod.ctdweb.tools.BridgeTest'
+}

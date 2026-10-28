@@ -1,0 +1,41 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "LGPL-3.0-or-later"
+
+[[mods]]
+modId = "ctdweb"
+version = "${file.jarVersion}"
+displayName = "Create Train Dispatching Web Bridge"
+authors = "HiBer_2007"
+description = '''
+Exposes the dispatch frame over a WebSocket so an external program can watch the
+railway and send commands back.
+
+The bridge decides nothing. It publishes a snapshot each tick, keeps only the
+most recent reply, and translates it into dispatch commands. If the client
+disconnects, RemotePolicy decides whether to hold, keep the last commands for a
+grace period, or fall back to Create's native behaviour.
+
+Connect to ws://host:8765/ctd
+'''
+
+[[dependencies.ctdweb]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.ctdweb]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21.1,1.22)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.ctdweb]]
+modId = "ctdapi"
+type = "required"
+versionRange = "[0.1,)"
+ordering = "AFTER"
+side = "BOTH"
