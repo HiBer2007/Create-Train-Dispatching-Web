@@ -51,12 +51,14 @@
 
 | # | 做法 | 结果 |
 |---|---|---|
-| 1 | 直接放进 `waitingTrains` | `Carriage` 的 `serialisedEntity` 是空的，`EntityType.create` 返回 null → `train.invalid = true` → 被移除 |
+| 1 | 直接放进 `waitingTrains` | `Carriage.serialisedEntity` 为空，`EntityType.create` 返回 null → `train.invalid = true` → 被移除 |
 | 2 | 补实体 NBT | `Contraption.fromNBT` 里 `fromType("")` 返回 null → `contraption.readNBT` NPE |
 | 3 | 补 `"Contraption"` + `"Type": "create:carriage"` | `saveWithoutId` 抛 `ReportedException: Saving entity NBT` |
-| 4 | 先 `setContraption` 再存 | `NPE: BlockPos.getX() because "p_129225_" is null` —— 构造的 `anchor` 是 null |
+| 4 | 先 `setContraption` 再存 | `NPE: BlockPos.getX()` —— `Contraption.writeNBT` 里 `NbtUtils.writeBlockPos(anchor)`，anchor 是 null |
+| 5 | 给 `anchor` 赋值 | `NPE: read field "minY" because "contraption.bounds" is null` |
+| 6 | 再给 `bounds` 赋值 | `NPE: UUID.getMostSignificantBits()` —— 又一个必填 UUID 是 null |
 
-**每一步都能修，修完露出下一步，而下一步依然要求真实组装。** anchor 是组装时那个方块的位置。
+**每一步都能修，修完露出下一步。** 这些字段平时由组装过程填充：anchor 是那个方块的位置、bounds 是被移动方块的包围盒、UUID 是这次组装的标识。手工填「空但合法」的值，等于伪造一次从未发生的组装。
 四条都写在 `DebugTrainCommand` 的注释里，不用再走一遍。
 
 ---
