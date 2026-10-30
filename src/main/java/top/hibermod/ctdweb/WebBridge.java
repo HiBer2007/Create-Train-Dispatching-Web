@@ -53,8 +53,30 @@ public final class WebBridge {
     private volatile Thread acceptThread;
     private volatile boolean running;
 
+    /** 外部控制指令的落点；默认丢弃（离线或只读部署）。 */
+    private volatile ControlSink control = ControlSink.NONE;
+
+    /** 已接受 / 已拒绝的外部控制指令数。 */
+    private final AtomicInteger controlsAccepted = new AtomicInteger();
+    private final AtomicInteger controlsRejected = new AtomicInteger();
+
     public WebBridge(int port) {
         this.port = port;
+    }
+
+    /** 指定控制指令的落点（生产环境用 {@link ControlSink#controlChannel(long)}）。 */
+    public void setControlSink(ControlSink sink) {
+        this.control = sink == null ? ControlSink.NONE : sink;
+    }
+
+    /** 已接受的外部控制指令数（诊断用）。 */
+    public int controlsAccepted() {
+        return controlsAccepted.get();
+    }
+
+    /** 已拒绝的外部控制指令数（坏 uuid / 没有落点）。 */
+    public int controlsRejected() {
+        return controlsRejected.get();
     }
 
     public int port() {
@@ -281,6 +303,10 @@ public final class WebBridge {
         /** 回执与任务结果走同一个通道，靠 JSON 里的 taskResult 字段区分。 */
         private void handleText(String text) {
             String trimmed = text.trim();
+            if (trimmed.contains("\"control\"")) {
+                handleControl(trimmed);
+                return;
+            }
             if (trimmed.contains("taskResult")) {
                 String id = extract(trimmed, "id");
                 boolean ok = trimmed.contains("\"ok\":true");
@@ -288,6 +314,66 @@ public final class WebBridge {
                 broker.complete(id, ok, payload, 0);
             } else {
                 acceptResponse(text);
+            }
+        }
+
+        /**
+         * 外部控制指令：扣车 / 放行。
+         *
+         * <p>格式 {@code {"control":{"train":"<uuid>","kind":"hold|proceed",
+         * "authority":320.0,"speedCap":0.4,"note":"..."}}}。
+         * 只会进 {@link ControlSink}——真正的落点是宿主的控制通道，
+         * 那条通道在服务端 tick 里被取走。网络线程绝不直接碰世界。
+         */
+        private void handleControl(String json) {
+            String train = extract(json, "train");
+            String kind = extract(json, "kind");
+            String note = extract(json, "note");
+
+            java.util.UUID id;
+            try {
+                id = java.util.UUID.fromString(train);
+            } catch (RuntimeException e) {
+                controlsRejected.incrementAndGet();
+                return;
+            }
+
+            boolean ok;
+            if ("proceed".equalsIgnoreCase(kind)) {
+                ok = control.proceed(id, extractNumber(json, "authority"),
+                    extractNumber(json, "speedCap"), note);
+            } else {
+                ok = control.hold(id, note);
+            }
+
+            if (ok) {
+                controlsAccepted.incrementAndGet();
+                // 控制指令是低频且影响行车的，值得每条都留痕
+                System.out.println("[ctdweb] control " + kind.toLowerCase()
+                    + " " + id + (note.isEmpty() ? "" : " (" + note + ")") + " -> accepted");
+            } else {
+                controlsRejected.incrementAndGet();
+                System.out.println("[ctdweb] control " + kind + " " + id + " -> rejected");
+            }
+        }
+
+        /** 数值取值：抓 "key":123.4 的第一个数字。 */
+        private double extractNumber(String json, String key) {
+            int k = json.indexOf("\"" + key + "\"");
+            if (k < 0) return 0.0;
+            int colon = json.indexOf(':', k);
+            if (colon < 0) return 0.0;
+
+            int end = colon + 1;
+            while (end < json.length()) {
+                char c = json.charAt(end);
+                if (c == ',' || c == '}' || c == ' ') break;
+                end++;
+            }
+            try {
+                return Double.parseDouble(json.substring(colon + 1, end).trim());
+            } catch (RuntimeException e) {
+                return 0.0;
             }
         }
 

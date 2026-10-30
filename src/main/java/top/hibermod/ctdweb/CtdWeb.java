@@ -26,6 +26,9 @@ public final class CtdWeb {
     public CtdWeb(IEventBus modBus) {
         DispatchKernels.register(RemoteKernel.ID, () -> new RemoteKernel(bridge, policy));
         NeoForge.EVENT_BUS.addListener(this::onServerStopping);
+        // 网页/外部系统下发的人工指令落到宿主的控制通道（每 tick 被取走）。
+        // 没有这一行，浏览器能看到车但动不了车。
+        bridge.setControlSink(ControlSink.controlChannel(CtdWeb::currentGameTime));
         bridge.start();
     }
 
@@ -39,5 +42,14 @@ public final class CtdWeb {
 
     public RemotePolicy policy() {
         return policy;
+    }
+    /** 当前游戏刻；没有服务端时退化为 0（控制通道只把它当时间戳看）。 */
+    private static long currentGameTime() {
+        try {
+            var server = net.neoforged.neoforge.server.ServerLifecycleHooks.getCurrentServer();
+            return server == null ? 0L : server.overworld().getGameTime();
+        } catch (Throwable t) {
+            return 0L;
+        }
     }
 }

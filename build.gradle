@@ -83,6 +83,12 @@ tasks.register('taskBrokerTest', JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'top.hibermod.ctdweb.tools.TaskBrokerTest'
 }
+tasks.register('controlTest', JavaExec) {
+    group = 'verification'
+    description = 'D5 验收：外部程序下发的控制指令能进到 ControlSink'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'top.hibermod.ctdweb.tools.ControlTest'
+}
 tasks.register('protocolHarness', JavaExec) {
     group = 'verification'
     description = '协议联调台：起桥并等外部客户端'
