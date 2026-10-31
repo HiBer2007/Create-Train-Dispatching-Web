@@ -111,6 +111,7 @@ def main():
     end = time.time() + seconds
     frames = 0
     sent = 0
+    last_time = -1
 
     while time.time() < end:
         opcode, payload = ws.recv()
@@ -121,6 +122,15 @@ def main():
             msg = json.loads(payload)
         except json.JSONDecodeError:
             continue
+
+        # 只认「最新」的一帧：socket 里积压的旧帧会被一条条读出来，
+        # 于是打印的 speed 是几十秒前的值（实测：宿主 0.300，客户端一直打印 0.0075）。
+        # 看起来像桥接遥测过期，实际是客户端在考古。用帧里的 time 做单调判断。
+        frame_time = msg.get("time")
+        if isinstance(frame_time, (int, float)):
+            if frame_time < last_time:
+                continue
+            last_time = frame_time
 
         trains = msg.get("trains") or []
         if not trains:
@@ -138,8 +148,9 @@ def main():
 
         if sent % 40 == 1:
             t = trains[0]
-            print(f"frame {frames}: {len(trains)} train(s), "
-                  f"reported speed={t.get('speed')} -> commanding cap={CAP}")
+            # 把帧里的 time 也打出来：客户端如果落后于服务端，一眼就能看出
+            print(f"frame {frames} t={msg.get('time')}: {len(trains)} train(s), "
+                  f"reported speed={round(t.get('speed') or 0, 4)} -> commanding cap={CAP}")
 
     print(f"done. frames={frames} commands={sent}")
     ws.close()
